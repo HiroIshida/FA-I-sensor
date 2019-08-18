@@ -20,6 +20,7 @@
 #include <math.h>
 #include <ros.h>
 #include <force_proximity_ros/ProximityStamped.h>
+#include <vector>
 
 
 /***** ROS *****/
@@ -50,6 +51,8 @@ unsigned long time;
 /***** GLOBAL VARIABLES *****/
 unsigned int proximity_value0; // current proximity reading
 unsigned int average_value0;   // low-pass filtered proximity reading
+unsigned int proximity_value1; // current proximity reading
+unsigned int average_value1;   // low-pass filtered proximity reading
 
 //Write a two byte value to a Command Register
 void writeToCommandRegister(byte commandCode, byte lowVal, byte highVal)
@@ -59,6 +62,12 @@ void writeToCommandRegister(byte commandCode, byte lowVal, byte highVal)
   Wire.write(lowVal); //Low byte of command
   Wire.write(highVal); //High byte of command
   Wire.endTransmission(); //Release bus
+
+  Wire1.beginTransmission(VCNL4040_ADDR);
+  Wire1.write(commandCode);
+  Wire1.write(lowVal); //Low byte of command
+  Wire1.write(highVal); //High byte of command
+  Wire1.endTransmission(); //Release bus
 }
 
 void startProxSensor()
@@ -87,23 +96,29 @@ void stopProxSensor()
 }
 
 //Reads a two byte value from a command register
-unsigned int readFromCommandRegister(byte commandCode)
+std::vector<unsigned int> readFromCommandRegister(byte commandCode)
 {
   Wire.beginTransmission(VCNL4040_ADDR);
   Wire.write(commandCode);
   Wire.endTransmission(false); //Send a restart command. Do not release bus.
-
   Wire.requestFrom(VCNL4040_ADDR, 2); //Command codes have two bytes stored in them
+  unsigned int data0 = Wire.read();
+  data0 |= Wire.read() << 8;
 
-  unsigned int data = Wire.read();
-  data |= Wire.read() << 8;
+  Wire1.beginTransmission(VCNL4040_ADDR);
+  Wire1.write(commandCode);
+  Wire1.endTransmission(false); //Send a restart command. Do not release bus.
+  Wire1.requestFrom(VCNL4040_ADDR, 2); //Command codes have two bytes stored in them
+  unsigned int data1 = Wire1.read();
+  data1 |= Wire1.read() << 8;
 
-  return (data);
+  std::vector<unsigned int> data_vec{data0, data1};
+  return data_vec;
 }
 
-unsigned int readProximity() {
+std::vector<unsigned int> readProximity() {
   startProxSensor();
-  unsigned int data = readFromCommandRegister(PS_DATA_L);
+  auto data = readFromCommandRegister(PS_DATA_L);
   return data;
 }
 
@@ -118,10 +133,14 @@ void setup()
     nh.spinOnce();
   }
   Wire.begin();
+  Wire1.begin();
   initVCNL4040();
   delay(10);
-  proximity_value0 = readProximity();
+  auto tmp = readProximity();
+  proximity_value0 = tmp[0];
+  proximity_value1 = tmp[1];
   average_value0 = proximity_value0;
+  average_value1 = proximity_value1;
 }
 
 void loop()
@@ -129,17 +148,20 @@ void loop()
   time = millis();
 
   // Read sensor values
-  proximity_value0 = readProximity();
+  auto tmp = readProximity();
+  proximity_value0 = tmp[0];
+  proximity_value1 = tmp[1];
   prx_msg0.proximity.proximity = proximity_value0;
   prx_msg0.proximity.average = average_value0;
-  prx_msg1.proximity.proximity = 0;
-  prx_msg1.proximity.average = 0;
+  prx_msg1.proximity.proximity = proximity_value1;
+  prx_msg1.proximity.average = average_value1;
 
   prx_pub0.publish(&prx_msg0);
   prx_pub1.publish(&prx_msg1);
 
   // Do this last
   average_value0 = EA * proximity_value0 + (1 - EA) * average_value0;
+  average_value1 = EA * proximity_value1 + (1 - EA) * average_value1;
   while (millis() < time + LOOP_TIME); // enforce constant loop time
   nh.spinOnce();
 
