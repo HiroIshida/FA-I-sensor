@@ -25,8 +25,8 @@
 
 /***** ROS *****/
 ros::NodeHandle  nh;
-force_proximity_ros::ProximityStamped prx_msg;
-ros::Publisher prx_pub("proximity_sensor", &prx_msg);
+force_proximity_ros::ProximityStamped prx_msg0;
+ros::Publisher prx_pub("proximity_sensor", &prx_msg0);
 
 /***** USER PARAMETERS *****/
 
@@ -47,12 +47,8 @@ unsigned long time;
 #define EA 0.3  // exponential average weight parameter / cut-off frequency for high-pass filter
 
 /***** GLOBAL VARIABLES *****/
-unsigned int proximity_value; // current proximity reading
-unsigned int average_value;   // low-pass filtered proximity reading
-signed int fa2;              // FA-II value;
-signed int fa2derivative;     // Derivative of the FA-II value;
-signed int fa2deriv_last;     // Last value of the derivative (for zero-crossing detection)
-signed int sensitivity = 50;  // Sensitivity of touch/release detection, values closer to zero increase sensitivity
+unsigned int proximity_value0; // current proximity reading
+unsigned int average_value0;   // low-pass filtered proximity reading
 
 //Write a two byte value to a Command Register
 void writeToCommandRegister(byte commandCode, byte lowVal, byte highVal)
@@ -122,9 +118,8 @@ void setup()
   WIRE.begin();
   initVCNL4040();
   delay(10);
-  proximity_value = readProximity();
-  average_value = proximity_value;
-  fa2 = 0;
+  proximity_value0 = readProximity();
+  average_value0 = proximity_value0;
 }
 
 void loop()
@@ -132,32 +127,14 @@ void loop()
   time = millis();
 
   // Read sensor values
-  proximity_value = readProximity();
-  fa2deriv_last = fa2derivative;
-  fa2derivative = (signed int) average_value - proximity_value - fa2;
-  fa2 = (signed int) average_value - proximity_value;
+  proximity_value0 = readProximity();
+  prx_msg0.proximity.proximity = proximity_value0;
+  prx_msg0.proximity.average = average_value0;
 
-  prx_msg.proximity.proximity = proximity_value;
-  prx_msg.proximity.average = average_value;
-  prx_msg.proximity.fa2 = fa2;
-  prx_msg.proximity.fa2derivative = fa2derivative;
-  if (fa2 < -sensitivity) prx_msg.proximity.mode = "T";
-  else if (fa2 > sensitivity) prx_msg.proximity.mode = "R";
-  else prx_msg.proximity.mode = "0";
-
-  prx_pub.publish(&prx_msg);
-
-  //Serial.print(proximity_value);
-  //Serial.print(",");
-  //Serial.print(fa2);
-  //Serial.print(",");
-  //Serial.print(",");
-  //Serial.print(fa2derivative);
-  //Serial.print("T");
-  //Serial.print("R");
+  prx_pub.publish(&prx_msg0);
 
   // Do this last
-  average_value = EA * proximity_value + (1 - EA) * average_value;
+  average_value0 = EA * proximity_value0 + (1 - EA) * average_value0;
   while (millis() < time + LOOP_TIME); // enforce constant loop time
   nh.spinOnce();
 
