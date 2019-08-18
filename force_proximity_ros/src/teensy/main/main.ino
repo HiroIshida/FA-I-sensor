@@ -25,7 +25,9 @@
 /***** ROS *****/
 ros::NodeHandle  nh;
 force_proximity_ros::ProximityStamped prx_msg0;
-ros::Publisher prx_pub("proximity_sensor", &prx_msg0);
+ros::Publisher prx_pub0("proximity_sensor0", &prx_msg0);
+force_proximity_ros::ProximityStamped prx_msg1;
+ros::Publisher prx_pub1("proximity_sensor1", &prx_msg1);
 
 /***** USER PARAMETERS *****/
 
@@ -109,7 +111,8 @@ void setup()
 {
   nh.getHardware()->setBaud(57600);
   nh.initNode();
-  nh.advertise(prx_pub);
+  nh.advertise(prx_pub0);
+  nh.advertise(prx_pub1);
   while(!nh.connected())
   {
     nh.spinOnce();
@@ -129,8 +132,11 @@ void loop()
   proximity_value0 = readProximity();
   prx_msg0.proximity.proximity = proximity_value0;
   prx_msg0.proximity.average = average_value0;
+  prx_msg1.proximity.proximity = 0;
+  prx_msg1.proximity.average = 0;
 
-  prx_pub.publish(&prx_msg0);
+  prx_pub0.publish(&prx_msg0);
+  prx_pub1.publish(&prx_msg1);
 
   // Do this last
   average_value0 = EA * proximity_value0 + (1 - EA) * average_value0;
