@@ -20,7 +20,6 @@
 #include <math.h>
 #include <ros.h>
 #include <force_proximity_ros/ProximityStamped.h>
-#define WIRE Wire1
 
 
 /***** ROS *****/
@@ -47,24 +46,40 @@ unsigned long time;
 #define EA 0.3  // exponential average weight parameter / cut-off frequency for high-pass filter
 
 /***** GLOBAL VARIABLES *****/
-unsigned int proximity_value; // current proximity reading
-unsigned int average_value;   // low-pass filtered proximity reading
+/* TODO
 signed int fa2;              // FA-II value;
 signed int fa2derivative;     // Derivative of the FA-II value;
 signed int fa2deriv_last;     // Last value of the derivative (for zero-crossing detection)
-signed int sensitivity = 50;  // Sensitivity of touch/release detection, values closer to zero increase sensitivity
+*/
+
+class ProxSensor
+{
+  static signed int sensitivity = 50;  // Sensitivity of touch/release detection, values closer to zero increase sensitivity
+
+  unsigned int proximity_value; // current proximity reading
+  unsigned int average_value;   // low-pass filtered proximity reading
+  bool isInitial;
+
+  ProxSensor();
+  void writeToCommandRegister(byte commandCode, byte lowVal, byte highVal);
+  void startProxSensor();
+  void initVCNL4040();
+  void stopProxSensor();
+  void readProximity();
+  unsigned int readFromCommandRegister(byte commandCode);
+};
 
 //Write a two byte value to a Command Register
-void writeToCommandRegister(byte commandCode, byte lowVal, byte highVal)
+void ProxSensor::writeToCommandRegister(byte commandCode, byte lowVal, byte highVal)
 {
-  WIRE.beginTransmission(VCNL4040_ADDR);
-  WIRE.write(commandCode);
-  WIRE.write(lowVal); //Low byte of command
-  WIRE.write(highVal); //High byte of command
-  WIRE.endTransmission(); //Release bus
+  wire.beginTransmission(VCNL4040_ADDR);
+  wire.write(commandCode);
+  wire.write(lowVal); //Low byte of command
+  wire.write(highVal); //High byte of command
+  wire.endTransmission(); //Release bus
 }
 
-void startProxSensor()
+void ProxSensor::startProxSensor()
 {
   //Clear PS_SD to turn on proximity sensing
   //Integrate 8T, Clear PS_SD bit to begin reading
@@ -72,7 +87,7 @@ void startProxSensor()
   writeToCommandRegister(PS_CONF1, 0b00001110, 0b00001000); //Command register, low byte, high byte
 }
 
-void initVCNL4040()
+void ProxSensor::initVCNL4040()
 {
   startProxSensor();
 
@@ -82,7 +97,7 @@ void initVCNL4040()
   writeToCommandRegister(PS_CONF3, 0x00, 0b00000001);
 }
 
-void stopProxSensor()
+void ProxSensor::stopProxSensor()
 {
   //Set PS_SD to turn off proximity sensing
   //Set PS_SD bit to stop reading
@@ -90,25 +105,38 @@ void stopProxSensor()
 }
 
 //Reads a two byte value from a command register
-unsigned int readFromCommandRegister(byte commandCode)
+unsigned int ProxSensor::readFromCommandRegister(byte commandCode)
 {
-  WIRE.beginTransmission(VCNL4040_ADDR);
-  WIRE.write(commandCode);
-  WIRE.endTransmission(false); //Send a restart command. Do not release bus.
-
-  WIRE.requestFrom(VCNL4040_ADDR, 2); //Command codes have two bytes stored in them
-
-  unsigned int data = WIRE.read();
-  data |= WIRE.read() << 8;
-
+  wire.beginTransmission(VCNL4040_ADDR);
+  wire.write(commandCode);
+  wire.endTransmission(false); //Send a restart command. Do not release bus.
+  wire.requestFrom(VCNL4040_ADDR, 2); //Command codes have two bytes stored in them
+  unsigned int data = wire.read();
+  data |= wire.read() << 8;
   return (data);
 }
 
-unsigned int readProximity() {
+void ProxSensor::readProximity() {
   startProxSensor();
   unsigned int data = readFromCommandRegister(PS_DATA_L);
-  return data;
+  proximity_value = data;
+  if(isInitial){
+    average_value = proximity_value;
+  }else{
+    average_value = EA * proximity_value + (1 - EA) * average_value;
+  }
 }
+
+ProxSensor::ProxSensor(i2c_t3 wire_){
+  isInitial = true;
+  wire = wire_;
+  wire.begin();
+  wire.initVCNL4040();
+  delay(10);
+  wire.readProximity();
+}
+
+prox = ProxSensor(Wire);
 
 void setup()
 {
@@ -119,46 +147,15 @@ void setup()
   {
     nh.spinOnce();
   }
-  WIRE.begin();
-  initVCNL4040();
-  delay(10);
-  proximity_value = readProximity();
-  average_value = proximity_value;
-  fa2 = 0;
 }
 
 void loop()
 {
   time = millis();
-
-  // Read sensor values
-  proximity_value = readProximity();
-  fa2deriv_last = fa2derivative;
-  fa2derivative = (signed int) average_value - proximity_value - fa2;
-  fa2 = (signed int) average_value - proximity_value;
-
-  prx_msg.proximity.proximity = proximity_value;
-  prx_msg.proximity.average = average_value;
-  prx_msg.proximity.fa2 = fa2;
-  prx_msg.proximity.fa2derivative = fa2derivative;
-  if (fa2 < -sensitivity) prx_msg.proximity.mode = "T";
-  else if (fa2 > sensitivity) prx_msg.proximity.mode = "R";
-  else prx_msg.proximity.mode = "0";
-
+  prox.readProximity();
+  prx_msg.proximity.proximity = prox.proximity_value;
+  prx_msg.proximity.average = prox.average_value;
   prx_pub.publish(&prx_msg);
-
-  //Serial.print(proximity_value);
-  //Serial.print(",");
-  //Serial.print(fa2);
-  //Serial.print(",");
-  //Serial.print(",");
-  //Serial.print(fa2derivative);
-  //Serial.print("T");
-  //Serial.print("R");
-
-  // Do this last
-  average_value = EA * proximity_value + (1 - EA) * average_value;
   while (millis() < time + LOOP_TIME); // enforce constant loop time
   nh.spinOnce();
-
 }
