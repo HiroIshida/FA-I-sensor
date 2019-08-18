@@ -54,19 +54,20 @@ signed int fa2deriv_last;     // Last value of the derivative (for zero-crossing
 
 class ProxSensor
 {
-  static signed int sensitivity = 50;  // Sensitivity of touch/release detection, values closer to zero increase sensitivity
+  static const signed int sensitivity = 50;  // Sensitivity of touch/release detection, values closer to zero increase sensitivity
+  public:
+    unsigned int proximity_value; // current proximity reading
+    unsigned int average_value;   // low-pass filtered proximity reading
+    bool isInitial;
 
-  unsigned int proximity_value; // current proximity reading
-  unsigned int average_value;   // low-pass filtered proximity reading
-  bool isInitial;
-
-  ProxSensor();
-  void writeToCommandRegister(byte commandCode, byte lowVal, byte highVal);
-  void startProxSensor();
-  void initVCNL4040();
-  void stopProxSensor();
-  void readProximity();
-  unsigned int readFromCommandRegister(byte commandCode);
+    ProxSensor(i2c_t3 wire_);
+    void writeToCommandRegister(byte commandCode, byte lowVal, byte highVal);
+    void startProxSensor();
+    void initVCNL4040();
+    void stopProxSensor();
+    void readProximity();
+    unsigned int readFromCommandRegister(byte commandCode);
+    i2c_t3 wire;
 };
 
 //Write a two byte value to a Command Register
@@ -87,36 +88,8 @@ void ProxSensor::startProxSensor()
   writeToCommandRegister(PS_CONF1, 0b00001110, 0b00001000); //Command register, low byte, high byte
 }
 
-void ProxSensor::initVCNL4040()
+void ProxSensor::readProximity()
 {
-  startProxSensor();
-
-  delay(1);
-  //Set the options for PS_CONF3 and PS_MS bytes
-  //Set IR LED current to 75mA
-  writeToCommandRegister(PS_CONF3, 0x00, 0b00000001);
-}
-
-void ProxSensor::stopProxSensor()
-{
-  //Set PS_SD to turn off proximity sensing
-  //Set PS_SD bit to stop reading
-  writeToCommandRegister(PS_CONF1, 0b00000001, 0b00000000); //Command register, low byte, high byte
-}
-
-//Reads a two byte value from a command register
-unsigned int ProxSensor::readFromCommandRegister(byte commandCode)
-{
-  wire.beginTransmission(VCNL4040_ADDR);
-  wire.write(commandCode);
-  wire.endTransmission(false); //Send a restart command. Do not release bus.
-  wire.requestFrom(VCNL4040_ADDR, 2); //Command codes have two bytes stored in them
-  unsigned int data = wire.read();
-  data |= wire.read() << 8;
-  return (data);
-}
-
-void ProxSensor::readProximity() {
   startProxSensor();
   unsigned int data = readFromCommandRegister(PS_DATA_L);
   proximity_value = data;
@@ -127,16 +100,17 @@ void ProxSensor::readProximity() {
   }
 }
 
+
 ProxSensor::ProxSensor(i2c_t3 wire_){
   isInitial = true;
   wire = wire_;
   wire.begin();
-  wire.initVCNL4040();
+  initVCNL4040();
   delay(10);
-  wire.readProximity();
+  readProximity();
 }
 
-prox = ProxSensor(Wire);
+ProxSensor prox(Wire);
 
 void setup()
 {
