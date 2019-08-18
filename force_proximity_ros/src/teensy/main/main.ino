@@ -60,24 +60,23 @@ class ProxSensor
     unsigned int average_value;   // low-pass filtered proximity reading
     bool isInitial;
 
-    ProxSensor(i2c_t3 wire_);
+    ProxSensor(i2c_t3* wire_);
     void writeToCommandRegister(byte commandCode, byte lowVal, byte highVal);
     void startProxSensor();
     void initVCNL4040();
-    void stopProxSensor();
     void readProximity();
     unsigned int readFromCommandRegister(byte commandCode);
-    i2c_t3 wire;
+    i2c_t3* wire;
 };
 
 //Write a two byte value to a Command Register
 void ProxSensor::writeToCommandRegister(byte commandCode, byte lowVal, byte highVal)
 {
-  wire.beginTransmission(VCNL4040_ADDR);
-  wire.write(commandCode);
-  wire.write(lowVal); //Low byte of command
-  wire.write(highVal); //High byte of command
-  wire.endTransmission(); //Release bus
+  wire->beginTransmission(VCNL4040_ADDR);
+  wire->write(commandCode);
+  wire->write(lowVal); //Low byte of command
+  wire->write(highVal); //High byte of command
+  wire->endTransmission(); //Release bus
 }
 
 void ProxSensor::startProxSensor()
@@ -86,6 +85,30 @@ void ProxSensor::startProxSensor()
   //Integrate 8T, Clear PS_SD bit to begin reading
   //Set PS to 16-bit
   writeToCommandRegister(PS_CONF1, 0b00001110, 0b00001000); //Command register, low byte, high byte
+}
+
+void ProxSensor::initVCNL4040()
+{
+  startProxSensor();
+
+  delay(1);
+  //Set the options for PS_CONF3 and PS_MS bytes
+  //Set IR LED current to 75mA
+  writeToCommandRegister(PS_CONF3, 0x00, 0b00000001);
+}
+
+unsigned int ProxSensor::readFromCommandRegister(byte commandCode)
+{
+  Wire.beginTransmission(VCNL4040_ADDR);
+  Wire.write(commandCode);
+  Wire.endTransmission(false); //Send a restart command. Do not release bus.
+
+  Wire.requestFrom(VCNL4040_ADDR, 2); //Command codes have two bytes stored in them
+
+  unsigned int data = Wire.read();
+  data |= Wire.read() << 8;
+
+  return (data);
 }
 
 void ProxSensor::readProximity()
@@ -101,16 +124,16 @@ void ProxSensor::readProximity()
 }
 
 
-ProxSensor::ProxSensor(i2c_t3 wire_){
+ProxSensor::ProxSensor(i2c_t3* wire_){
   isInitial = true;
   wire = wire_;
-  wire.begin();
+  wire->begin();
   initVCNL4040();
   delay(10);
   readProximity();
 }
 
-ProxSensor prox(Wire);
+ProxSensor prox(&Wire);
 
 void setup()
 {
