@@ -16,14 +16,11 @@
 */
 
 /***** Library parameters ****/
-/* #define WIRE Wire1 */
-#define WIRE Wire
-
 #include <i2c_t3.h>     // Use <i2c_t3.h> for Teensy and <Wire.h> for Arduino
-// #include <Wire.h>
 #include <math.h>
 #include <ros.h>
 #include <force_proximity_ros/ProximityStamped.h>
+#define WIRE Wire1
 
 
 /***** ROS *****/
@@ -60,11 +57,11 @@ signed int sensitivity = 50;  // Sensitivity of touch/release detection, values 
 //Write a two byte value to a Command Register
 void writeToCommandRegister(byte commandCode, byte lowVal, byte highVal)
 {
-  Wire.beginTransmission(VCNL4040_ADDR);
-  Wire.write(commandCode);
-  Wire.write(lowVal); //Low byte of command
-  Wire.write(highVal); //High byte of command
-  Wire.endTransmission(); //Release bus
+  WIRE.beginTransmission(VCNL4040_ADDR);
+  WIRE.write(commandCode);
+  WIRE.write(lowVal); //Low byte of command
+  WIRE.write(highVal); //High byte of command
+  WIRE.endTransmission(); //Release bus
 }
 
 void startProxSensor()
@@ -95,14 +92,14 @@ void stopProxSensor()
 //Reads a two byte value from a command register
 unsigned int readFromCommandRegister(byte commandCode)
 {
-  Wire.beginTransmission(VCNL4040_ADDR);
-  Wire.write(commandCode);
-  Wire.endTransmission(false); //Send a restart command. Do not release bus.
+  WIRE.beginTransmission(VCNL4040_ADDR);
+  WIRE.write(commandCode);
+  WIRE.endTransmission(false); //Send a restart command. Do not release bus.
 
-  Wire.requestFrom(VCNL4040_ADDR, 2); //Command codes have two bytes stored in them
+  WIRE.requestFrom(VCNL4040_ADDR, 2); //Command codes have two bytes stored in them
 
-  unsigned int data = Wire.read();
-  data |= Wire.read() << 8;
+  unsigned int data = WIRE.read();
+  data |= WIRE.read() << 8;
 
   return (data);
 }
