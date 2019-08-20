@@ -26,12 +26,8 @@
 
 /***** ROS *****/
 ros::NodeHandle  nh;
-force_proximity_ros::ProximityStamped prx_msg0;
-ros::Publisher prx_pub0("proximity_sensor0", &prx_msg0);
-force_proximity_ros::ProximityStamped prx_msg1;
-ros::Publisher prx_pub1("proximity_sensor1", &prx_msg1);
 force_proximity_ros::ProximityArray prxes_msg;
-ros::Publisher prxes_pub("proxes", &prxes_msg);
+ros::Publisher prxes_pub("proximities", &prxes_msg);
 
 
 /***** USER PARAMETERS *****/
@@ -53,10 +49,8 @@ unsigned long time;
 #define EA 0.3  // exponential average weight parameter / cut-off frequency for high-pass filter
 
 /***** GLOBAL VARIABLES *****/
-unsigned int proximity_value0; // current proximity reading
-unsigned int average_value0;   // low-pass filtered proximity reading
-unsigned int proximity_value1; // current proximity reading
-unsigned int average_value1;   // low-pass filtered proximity reading
+unsigned int proximity_value[2]; // current proximity reading
+unsigned int average_value[2];   // low-pass filtered proximity reading
 
 //Write a two byte value to a Command Register
 void writeToCommandRegister(byte commandCode, byte lowVal, byte highVal)
@@ -130,8 +124,6 @@ void setup()
 {
   nh.getHardware()->setBaud(57600);
   nh.initNode();
-  nh.advertise(prx_pub0);
-  nh.advertise(prx_pub1);
   nh.advertise(prxes_pub);
   while(!nh.connected())
   {
@@ -142,10 +134,10 @@ void setup()
   initVCNL4040();
   delay(10);
   auto tmp = readProximity();
-  proximity_value0 = tmp[0];
-  proximity_value1 = tmp[1];
-  average_value0 = proximity_value0;
-  average_value1 = proximity_value1;
+  for(int i = 0; i<2; i++){
+    proximity_value[i] = tmp[i];
+    average_value[i] = proximity_value[i];
+  }
 }
 
 void loop()
@@ -153,26 +145,21 @@ void loop()
   time = millis();
 
   // Read sensor values
+  // TODO std::vector
+ 
   auto tmp = readProximity();
-  proximity_value0 = tmp[0];
-  proximity_value1 = tmp[1];
-  prx_msg0.proximity.proximity = proximity_value0;
-  prx_msg0.proximity.average = average_value0;
-  prx_msg1.proximity.proximity = proximity_value1;
-  prx_msg1.proximity.average = average_value1;
-  force_proximity_ros::Proximity proxes[2];
-  proxes[0] = prx_msg0.proximity; 
-  proxes[1] = prx_msg1.proximity; 
-  prxes_msg.proximities = proxes;
+  force_proximity_ros::Proximity proximities[2];
+  for(int i = 0; i < 2; i++){
+    proximity_value[i] = tmp[i];
+    average_value[i] = EA * proximity_value[i] + (1 - EA) * average_value[i];
+    proximities[i].proximity = proximity_value[i];
+    proximities[i].average = average_value[i];
+  }
+  prxes_msg.proximities = proximities;
   prxes_msg.proximities_length = 2;
-
-  prx_pub0.publish(&prx_msg0);
-  prx_pub1.publish(&prx_msg1);
   prxes_pub.publish(&prxes_msg);
 
   // Do this last
-  average_value0 = EA * proximity_value0 + (1 - EA) * average_value0;
-  average_value1 = EA * proximity_value1 + (1 - EA) * average_value1;
   while (millis() < time + LOOP_TIME); // enforce constant loop time
   nh.spinOnce();
 
