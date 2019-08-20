@@ -20,6 +20,7 @@
 #include <math.h>
 #include <ros.h>
 #include <force_proximity_ros/ProximityStamped.h>
+#include <force_proximity_ros/ProximityArray.h>
 #include <vector>
 
 
@@ -29,6 +30,9 @@ force_proximity_ros::ProximityStamped prx_msg0;
 ros::Publisher prx_pub0("proximity_sensor0", &prx_msg0);
 force_proximity_ros::ProximityStamped prx_msg1;
 ros::Publisher prx_pub1("proximity_sensor1", &prx_msg1);
+force_proximity_ros::ProximityArray prxes_msg;
+ros::Publisher prxes_pub("proxes", &prxes_msg);
+
 
 /***** USER PARAMETERS *****/
 
@@ -128,6 +132,7 @@ void setup()
   nh.initNode();
   nh.advertise(prx_pub0);
   nh.advertise(prx_pub1);
+  nh.advertise(prxes_pub);
   while(!nh.connected())
   {
     nh.spinOnce();
@@ -155,9 +160,15 @@ void loop()
   prx_msg0.proximity.average = average_value0;
   prx_msg1.proximity.proximity = proximity_value1;
   prx_msg1.proximity.average = average_value1;
+  force_proximity_ros::Proximity proxes[2];
+  proxes[0] = prx_msg0.proximity; 
+  proxes[1] = prx_msg1.proximity; 
+  prxes_msg.proximities = proxes;
+  prxes_msg.proximities_length = 2;
 
   prx_pub0.publish(&prx_msg0);
   prx_pub1.publish(&prx_msg1);
+  prxes_pub.publish(&prxes_msg);
 
   // Do this last
   average_value0 = EA * proximity_value0 + (1 - EA) * average_value0;
